@@ -1,15 +1,29 @@
 const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2');
+const url = require('url');
 require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Parse DATABASE_URL for mysql2
+const dbUrl = process.env.DATABASE_URL;
+const params = url.parse(dbUrl);
+const [user, password] = params.auth.split(':');
+const dbConfig = {
+    host: params.hostname,
+    user,
+    password,
+    database: params.pathname.replace('/', ''),
+    port: params.port,
+    ssl: { rejectUnauthorized: true }
+};
+
 // Use a connection pool for serverless environments
 const pool = mysql.createPool({
-    uri: process.env.DATABASE_URL,
+    ...dbConfig,
     waitForConnections: true,
     connectionLimit: 3,
     queueLimit: 0
