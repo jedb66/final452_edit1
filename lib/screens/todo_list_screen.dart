@@ -1,19 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/todo_activity.dart';
 import 'email_login_screen.dart';
 
 class TodoListScreen extends StatefulWidget {
   final String userEmail;
-  final int userId;
-  final List? initialTodos;
-  const TodoListScreen({
-    super.key,
-    required this.userEmail,
-    required this.userId,
-    this.initialTodos,
-  });
+  const TodoListScreen({super.key, required this.userEmail});
   @override
   State<TodoListScreen> createState() => _TodoListScreenState();
 }
@@ -24,39 +17,45 @@ class _TodoListScreenState extends State<TodoListScreen> {
   final _emojis = ['😊', '😢', '😡', '😴', '🤩', '😌', '😎', '🥳', '🤔', '😭'];
   String _emoji = '😊';
   DateTime _date = DateTime.now();
+  late SharedPreferences _prefs;
 
   @override
   void initState() {
     super.initState();
-    if (widget.initialTodos != null) {
-      _activities = widget.initialTodos!
-          .map((e) => TodoActivity.fromJson(e))
-          .toList()
-          .cast<TodoActivity>();
-      setState(() {});
-    } else {
-      _fetchTodos();
-    }
+    _init();
   }
 
-  Future<void> _fetchTodos() async {
-    final url = Uri.parse('http://localhost:3000/users/${widget.userId}/todos');
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final List data = json.decode(response.body);
-        setState(() {
-          _activities = data
-              .map((e) => TodoActivity.fromJson(e))
-              .toList()
-              .cast<TodoActivity>();
-        });
-      } else {
-        setState(() => _activities = []);
+  Future<void> _init() async {
+    _prefs = await SharedPreferences.getInstance();
+    final rawString = _prefs.getString('all_users_data');
+    if (rawString != null) {
+      final data = json.decode(rawString);
+      if (data is Map && data.containsKey(widget.userEmail)) {
+        final userData = data[widget.userEmail];
+        if (userData is List) {
+          setState(() {
+            _activities = userData
+                .map((e) => TodoActivity.fromJson(e))
+                .toList()
+                .cast<TodoActivity>();
+          });
+          return;
+        }
       }
-    } catch (e) {
-      setState(() => _activities = []);
     }
+    setState(() {
+      _activities = [];
+    });
+  }
+
+  Future<void> _save() async {
+    final rawString = _prefs.getString('all_users_data');
+    Map<String, dynamic> data = {};
+    if (rawString != null) {
+      data = json.decode(rawString);
+    }
+    data[widget.userEmail] = _activities.map((e) => e.toJson()).toList();
+    await _prefs.setString('all_users_data', json.encode(data));
   }
 
   void _add() {
@@ -71,11 +70,13 @@ class _TodoListScreenState extends State<TodoListScreen> {
       _date = DateTime.now();
       _emoji = '😊';
     });
+    _save();
   }
 
   void _toggle(int i, bool? v) {
     if (v == null) return;
     setState(() => _activities[i].done = v);
+    _save();
   }
 
   String _formatDate(String d) {

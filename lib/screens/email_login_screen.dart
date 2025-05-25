@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'todo_list_screen.dart';
 
@@ -40,44 +39,46 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
       final email = _emailController.text.trim().toLowerCase();
       final password = _passwordController.text;
 
-      // Replace with your backend URL
-      final url = Uri.parse('http://localhost:3000/users');
-      try {
-        // Fetch all users
-        final response = await http.get(url);
-        if (response.statusCode == 200) {
-          final List users = json.decode(response.body);
-          final user = users.firstWhere(
-            (u) => u['email'] == email && u['password'] == password,
-            orElse: () => null,
+      final prefs = await SharedPreferences.getInstance();
+      final userDataRaw = prefs.getString('user_credentials') ?? '{}';
+      final Map<String, String> users =
+          Map<String, String>.from(json.decode(userDataRaw));
+
+      // ✅ เช็กว่าเป็น admin แต่รหัสผ่านไม่ถูกต้อง
+      if (email == 'admin@gmail.com' && password != '123456789') {
+        _showError('Admin password incorrect');
+        return;
+      }
+
+      if (users.containsKey(email)) {
+        if (users[email] == password) {
+          await prefs.setString('logged_in_email', email);
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TodoListScreen(userEmail: email),
+            ),
           );
-          if (user != null) {
-            // Fetch todos for this user
-            final todosUrl =
-                Uri.parse('http://localhost:3000/users/${user['id']}/todos');
-            final todosResp = await http.get(todosUrl);
-            List todos = [];
-            if (todosResp.statusCode == 200) {
-              todos = json.decode(todosResp.body);
-            }
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => TodoListScreen(
-                  userEmail: email,
-                  userId: user['id'],
-                  initialTodos: todos,
-                ),
-              ),
-            );
-          } else {
-            _showError('Incorrect email or password');
-          }
         } else {
-          _showError('Server error');
+          _showError('Incorrect password');
         }
-      } catch (e) {
-        _showError('Network error');
+      } else {
+        // ✅ ไม่อนุญาตให้สมัครเป็น admin
+        if (email == 'admin@gmail.com') {
+          _showError('Admin account cannot be registered');
+          return;
+        }
+
+        // สมัครผู้ใช้ใหม่
+        users[email] = password;
+        await prefs.setString('user_credentials', json.encode(users));
+        await prefs.setString('logged_in_email', email);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TodoListScreen(userEmail: email),
+          ),
+        );
       }
     }
   }
