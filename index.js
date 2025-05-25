@@ -7,7 +7,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const connection = mysql.createConnection(process.env.DATABASE_URL);
+// Use a connection pool for serverless environments
+const pool = mysql.createPool({
+    uri: process.env.DATABASE_URL,
+    waitForConnections: true,
+    connectionLimit: 3,
+    queueLimit: 0
+});
 
 // Basic route
 app.get('/', (req, res) => {
@@ -16,7 +22,7 @@ app.get('/', (req, res) => {
 
 // Get all users
 app.get('/users', (req, res) => {
-    connection.query('SELECT * FROM users', function (err, results, fields) {
+    pool.query('SELECT * FROM users', function (err, results, fields) {
         if (err) {
             console.error('Error fetching users:', err);
             return res.status(500).send('Error fetching users');
@@ -28,7 +34,7 @@ app.get('/users', (req, res) => {
 // Get user by ID
 app.get('/users/:id', (req, res) => {
     const id = req.params.id;
-    connection.query('SELECT * FROM users WHERE id = ?', [id], function (err, results, fields) {
+    pool.query('SELECT * FROM users WHERE id = ?', [id], function (err, results, fields) {
         if (err) {
             console.error('Error fetching user:', err);
             return res.status(500).send('Error fetching user');
@@ -40,7 +46,7 @@ app.get('/users/:id', (req, res) => {
 // Get todo list for a specific user
 app.get('/users/:id/todos', (req, res) => {
     const userId = req.params.id;
-    connection.query('SELECT * FROM todo_list WHERE user_id = ?', [userId], function (err, results, fields) {
+    pool.query('SELECT * FROM todo_list WHERE user_id = ?', [userId], function (err, results, fields) {
         if (err) {
             console.error('Error fetching todos:', err);
             return res.status(500).send('Error fetching todos');
@@ -51,7 +57,7 @@ app.get('/users/:id/todos', (req, res) => {
 
 // Add a new user
 app.post('/users', (req, res) => {
-    connection.query(
+    pool.query(
         'INSERT INTO `users` (`email`, `password`) VALUES (?, ?)',
         [req.body.email, req.body.password],
         function (err, results, fields) {
@@ -66,7 +72,7 @@ app.post('/users', (req, res) => {
 
 // Update user
 app.put('/users', (req, res) => {
-    connection.query(
+    pool.query(
         'UPDATE `users` SET `email`=?, `password`=? WHERE id =?',
         [req.body.email, req.body.password, req.body.id],
         function (err, results, fields) {
@@ -81,7 +87,7 @@ app.put('/users', (req, res) => {
 
 // Delete user
 app.delete('/users', (req, res) => {
-    connection.query(
+    pool.query(
         'DELETE FROM `users` WHERE id =?',
         [req.body.id],
         function (err, results, fields) {
@@ -94,10 +100,7 @@ app.delete('/users', (req, res) => {
     );
 });
 
-// Start the server
-app.listen(process.env.PORT || 3000, () => {
-    console.log('CORS-enabled web server listening on port 3000');
-});
+// Do NOT call app.listen() in Vercel serverless functions
 
 // Export the app for Vercel serverless functions
 module.exports = app;
